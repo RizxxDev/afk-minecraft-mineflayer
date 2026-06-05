@@ -163,6 +163,25 @@ Jaga URL webhook seperti password. Siapa pun yang punya URL itu bisa mengirim pe
 
 Webhook yang sama juga dipakai untuk memberi tahu saat bot disconnect dan saat bot berhasil reconnect.
 
+## Auto Masuk AFK Jika Countdown Shard Tidak Ada
+
+Setelah bot menjalankan `/shards`, bot menunggu pesan seperti `Next shard in 60s`. Jika pesan countdown itu tidak muncul dalam `countdownWaitMs`, bot akan menjalankan `/afk`, menunggu GUI terbuka, lalu klik slot `clickSlot`.
+
+```json
+{
+  "shardAfkGuard": {
+    "enabled": true,
+    "countdownWaitMs": 8000,
+    "afkCommand": "/afk",
+    "guiWaitMs": 10000,
+    "clickSlot": 0,
+    "itemNames": ["AFK 1", "AfK 1"]
+  }
+}
+```
+
+Untuk GUI seperti gambar `AFK 1` di kiri atas, `clickSlot: 0` biasanya benar. Bot tetap mencoba mencari item bernama `AFK 1` dulu sebelum fallback ke slot itu.
+
 ## Jalan 24/7
 
 Paling stabil jalankan di VPS, komputer rumah yang selalu menyala, atau panel hosting yang mendukung Node.js.

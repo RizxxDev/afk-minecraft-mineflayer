@@ -46,6 +46,14 @@
     "swingArm": true,
     "jump": false
   },
+  "shardAfkGuard": {
+    "enabled": true,
+    "countdownWaitMs": 8000,
+    "afkCommand": "/afk",
+    "guiWaitMs": 10000,
+    "clickSlot": 0,
+    "itemNames": ["AFK 1", "AfK 1"]
+  },
   "repeatingCommands": [
     {
       "command": "/shards",

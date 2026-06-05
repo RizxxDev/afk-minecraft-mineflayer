@@ -40,6 +40,16 @@ function loadConfig () {
       swingArm: parsed.afk?.swingArm !== false,
       jump: parsed.afk?.jump === true
     },
+    shardAfkGuard: {
+      enabled: parsed.shardAfkGuard?.enabled !== false,
+      countdownWaitMs: Number(parsed.shardAfkGuard?.countdownWaitMs || 8000),
+      afkCommand: parsed.shardAfkGuard?.afkCommand || '/afk',
+      guiWaitMs: Number(parsed.shardAfkGuard?.guiWaitMs || 10000),
+      clickSlot: parsed.shardAfkGuard?.clickSlot === null ? null : Number(parsed.shardAfkGuard?.clickSlot ?? 0),
+      itemNames: Array.isArray(parsed.shardAfkGuard?.itemNames)
+        ? parsed.shardAfkGuard.itemNames
+        : ['AFK 1', 'AfK 1']
+    },
     repeatingCommands: Array.isArray(parsed.repeatingCommands) ? parsed.repeatingCommands : [],
     discordWebhook: {
       enabled: parsed.discordWebhook?.enabled === true,
@@ -106,6 +116,10 @@ function createSession (account, index) {
     repeatingCommandTimers: [],
     reconnectTimer: null,
     connectTimer: null,
+    shardCountdownTimer: null,
+    afkGuiTimer: null,
+    lastShardCountdownAt: 0,
+    pendingAfkGuiClick: false,
     reconnectAttempt: 0,
     hasSpawnedOnce: false,
     shouldReportReconnect: false
@@ -203,7 +217,12 @@ function attachBotEvents (session) {
   bot.on('message', (message) => {
     const text = message.toString().trim()
     if (text) sessionLog(session, `[CHAT] ${text}`)
+    handleShardCountdown(session, text)
     handleShardMessage(session, text).catch((err) => sessionLog(session, `Webhook failed: ${err.message || err}`))
+  })
+
+  bot.on('windowOpen', (window) => {
+    handleAfkWindow(session, window).catch((err) => sessionLog(session, `AFK GUI click failed: ${err.message || err}`))
   })
 
   bot.on('kicked', (reason) => {
@@ -224,6 +243,7 @@ function attachBotEvents (session) {
     }
     stopAfkLoop(session)
     stopRepeatingCommands(session)
+    stopShardAfkGuard(session)
     session.bot = null
     scheduleReconnect(session)
   })
@@ -324,6 +344,10 @@ function sendCommand (session, command, label) {
   const message = normalizeCommand(command)
   sessionLog(session, `${label}: ${redactCommand(message)}`)
   session.bot.chat(message)
+
+  if (/^\/shards\b/i.test(message)) {
+    scheduleShardCountdownCheck(session)
+  }
 }
 
 function normalizeCommand (command) {
@@ -346,6 +370,124 @@ async function handleShardMessage (session, text) {
 
   const shards = match[1].replace(/,/g, '')
   await sendShardWebhook(session, shards)
+}
+
+function handleShardCountdown (session, text) {
+  if (!/\bNext\s+shard\s+in\s+\d+\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes)\b/i.test(text)) {
+    return
+  }
+
+  session.lastShardCountdownAt = Date.now()
+  clearTimeout(session.shardCountdownTimer)
+  session.shardCountdownTimer = null
+  sessionLog(session, 'Shard countdown detected.')
+}
+
+function scheduleShardCountdownCheck (session) {
+  if (!config.shardAfkGuard.enabled) return
+
+  clearTimeout(session.shardCountdownTimer)
+  const startedAt = Date.now()
+
+  session.shardCountdownTimer = setTimeout(() => {
+    session.shardCountdownTimer = null
+    if (session.lastShardCountdownAt >= startedAt) return
+    enterAfkArea(session)
+  }, config.shardAfkGuard.countdownWaitMs)
+}
+
+function enterAfkArea (session) {
+  if (!session.bot) return
+
+  session.pendingAfkGuiClick = true
+  clearTimeout(session.afkGuiTimer)
+  session.afkGuiTimer = setTimeout(() => {
+    if (session.pendingAfkGuiClick) {
+      session.pendingAfkGuiClick = false
+      sessionLog(session, 'AFK GUI did not open before timeout.')
+    }
+  }, config.shardAfkGuard.guiWaitMs)
+
+  sendCommand(session, config.shardAfkGuard.afkCommand, 'No shard countdown found, opening AFK GUI')
+}
+
+async function handleAfkWindow (session, window) {
+  if (!session.pendingAfkGuiClick || !session.bot) return
+
+  const slot = findAfkClickSlot(window)
+  if (slot === null) {
+    sessionLog(session, 'AFK GUI opened, but target item was not found.')
+    return
+  }
+
+  clearTimeout(session.afkGuiTimer)
+  session.afkGuiTimer = null
+  session.pendingAfkGuiClick = false
+  sessionLog(session, `Clicking AFK GUI slot ${slot}.`)
+  await session.bot.clickWindow(slot, 0, 0)
+}
+
+function findAfkClickSlot (window) {
+  const namedSlot = findSlotByItemName(window)
+  if (namedSlot !== null) return namedSlot
+
+  if (Number.isInteger(config.shardAfkGuard.clickSlot)) {
+    return config.shardAfkGuard.clickSlot
+  }
+
+  return null
+}
+
+function findSlotByItemName (window) {
+  const itemNames = config.shardAfkGuard.itemNames.map((name) => String(name).toLowerCase())
+  const inventoryStart = window.inventoryStart || window.slots.length
+
+  for (let slot = 0; slot < inventoryStart; slot++) {
+    const item = window.slots[slot]
+    if (!item) continue
+
+    const labels = getItemLabels(item).map((label) => label.toLowerCase())
+    if (labels.some((label) => itemNames.some((name) => label.includes(name)))) {
+      return slot
+    }
+  }
+
+  return null
+}
+
+function getItemLabels (item) {
+  const labels = [item.displayName, item.name, item.customName].filter(Boolean).map(String)
+  const displayName = item.nbt?.value?.display?.value?.Name?.value
+  const lore = item.nbt?.value?.display?.value?.Lore?.value?.value
+
+  if (displayName) labels.push(stripMinecraftJsonText(displayName))
+  if (Array.isArray(lore)) {
+    for (const line of lore) labels.push(stripMinecraftJsonText(line))
+  }
+
+  return labels.filter(Boolean)
+}
+
+function stripMinecraftJsonText (value) {
+  const text = String(value)
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === 'string') return parsed
+    if (parsed.text) return String(parsed.text)
+    if (Array.isArray(parsed.extra)) return parsed.extra.map((part) => part.text || '').join('')
+  } catch {
+    return text.replace(/§[0-9A-FK-OR]/gi, '')
+  }
+
+  return text.replace(/§[0-9A-FK-OR]/gi, '')
+}
+
+function stopShardAfkGuard (session) {
+  clearTimeout(session.shardCountdownTimer)
+  clearTimeout(session.afkGuiTimer)
+  session.shardCountdownTimer = null
+  session.afkGuiTimer = null
+  session.pendingAfkGuiClick = false
 }
 
 async function sendShardWebhook (session, shards) {
@@ -415,6 +557,7 @@ function shutdown () {
   for (const session of sessions) {
     stopAfkLoop(session)
     stopRepeatingCommands(session)
+    stopShardAfkGuard(session)
     clearTimeout(session.reconnectTimer)
     clearTimeout(session.connectTimer)
 
