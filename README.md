@@ -36,9 +36,21 @@ Edit `config.json`:
 {
   "host": "play.example.com",
   "port": 25565,
-  "username": "NamaBot",
-  "auth": "microsoft",
-  "version": false
+  "version": false,
+  "accounts": [
+    {
+      "username": "NamaBot1",
+      "auth": "microsoft",
+      "profilesFolder": "./auth-cache/NamaBot1",
+      "commandsAfterSpawn": ["/server donutsmp"]
+    },
+    {
+      "username": "NamaBot2",
+      "auth": "microsoft",
+      "profilesFolder": "./auth-cache/NamaBot2",
+      "commandsAfterSpawn": ["/server donutsmp"]
+    }
+  ]
 }
 ```
 
@@ -46,8 +58,12 @@ Untuk server offline-mode/private:
 
 ```json
 {
-  "username": "AFKBot",
-  "auth": "offline"
+  "accounts": [
+    {
+      "username": "AFKBot",
+      "auth": "offline"
+    }
+  ]
 }
 ```
 
@@ -55,11 +71,42 @@ Untuk server yang butuh login command setelah masuk, isi:
 
 ```json
 {
-  "commandsAfterSpawn": ["/login password_kamu"]
+  "accounts": [
+    {
+      "username": "AFKBot",
+      "auth": "offline",
+      "commandsAfterSpawn": ["/login password_kamu", "/server donutsmp"]
+    }
+  ]
 }
 ```
 
 Simpan password hanya di komputer/server yang kamu percaya.
+
+## Multi Akun
+
+Untuk menjalankan lebih dari 1 akun, tambah objek baru di `accounts`. Setiap akun punya `username`, `auth`, `profilesFolder`, dan `commandsAfterSpawn` sendiri.
+
+```json
+{
+  "accounts": [
+    {
+      "username": "akun1",
+      "auth": "offline",
+      "profilesFolder": "./auth-cache/akun1",
+      "commandsAfterSpawn": ["/login password1", "/server donutsmp"]
+    },
+    {
+      "username": "akun2",
+      "auth": "offline",
+      "profilesFolder": "./auth-cache/akun2",
+      "commandsAfterSpawn": ["/login password2", "/server donutsmp"]
+    }
+  ]
+}
+```
+
+Bot otomatis memberi jeda login antar akun memakai `connectStaggerMs`, default 5000 ms.
 
 ## Kirim Shards ke Discord
 

@@ -5,29 +5,26 @@ const mineflayer = require('mineflayer')
 const configPath = path.join(__dirname, 'config.json')
 const exampleConfigPath = path.join(__dirname, 'config.example.json')
 const config = loadConfig()
+const sessions = config.accounts.map(createSession)
 
-let bot = null
-let afkTimer = null
-let repeatingCommandTimers = []
-let reconnectTimer = null
-let reconnectAttempt = 0
-let hasSpawnedOnce = false
-let shouldReportReconnect = false
 let shuttingDown = false
 
-connect()
+sessions.forEach((session) => {
+  session.connectTimer = setTimeout(() => connect(session), session.account.connectDelayMs)
+})
 
 function loadConfig () {
   const file = fs.existsSync(configPath) ? configPath : exampleConfigPath
   const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+  const commandsAfterSpawn = Array.isArray(parsed.commandsAfterSpawn) ? parsed.commandsAfterSpawn : []
+  const connectStaggerMs = Number(parsed.connectStaggerMs || 5000)
+  const accounts = normalizeAccounts(parsed, commandsAfterSpawn, connectStaggerMs)
 
   return {
     host: parsed.host || 'localhost',
     port: Number(parsed.port || 25565),
-    username: parsed.username || 'AFKBot',
-    auth: parsed.auth || 'offline',
     version: parsed.version === undefined ? false : parsed.version,
-    profilesFolder: parsed.profilesFolder || './auth-cache',
+    connectStaggerMs,
     reconnect: {
       enabled: parsed.reconnect?.enabled !== false,
       minDelayMs: Number(parsed.reconnect?.minDelayMs || 5000),
@@ -41,107 +38,146 @@ function loadConfig () {
       swingArm: parsed.afk?.swingArm !== false,
       jump: parsed.afk?.jump === true
     },
-    commandsAfterSpawn: Array.isArray(parsed.commandsAfterSpawn) ? parsed.commandsAfterSpawn : [],
     repeatingCommands: Array.isArray(parsed.repeatingCommands) ? parsed.repeatingCommands : [],
     discordWebhook: {
       enabled: parsed.discordWebhook?.enabled === true,
       url: parsed.discordWebhook?.url || '',
       username: parsed.discordWebhook?.username || 'Minecraft AFK Bot'
-    }
+    },
+    accounts
   }
 }
 
-function connect () {
-  clearTimeout(reconnectTimer)
-  reconnectTimer = null
+function normalizeAccounts (parsed, defaultCommandsAfterSpawn, connectStaggerMs) {
+  const rawAccounts = Array.isArray(parsed.accounts) && parsed.accounts.length > 0
+    ? parsed.accounts
+    : [{
+        username: parsed.username || 'AFKBot',
+        auth: parsed.auth || 'offline',
+        profilesFolder: parsed.profilesFolder || './auth-cache',
+        commandsAfterSpawn: defaultCommandsAfterSpawn
+      }]
 
-  log(`Connecting to ${config.host}:${config.port} as ${config.username} (${config.auth})`)
+  return rawAccounts.map((account, index) => ({
+    username: account.username || `AFKBot${index + 1}`,
+    auth: account.auth || parsed.auth || 'offline',
+    profilesFolder: account.profilesFolder || `./auth-cache/${account.username || `account-${index + 1}`}`,
+    connectDelayMs: Number(account.connectDelayMs ?? (index * connectStaggerMs)),
+    commandsAfterSpawn: Array.isArray(account.commandsAfterSpawn)
+      ? account.commandsAfterSpawn
+      : defaultCommandsAfterSpawn
+  }))
+}
 
-  bot = mineflayer.createBot({
+function createSession (account, index) {
+  return {
+    account,
+    index,
+    bot: null,
+    afkTimer: null,
+    repeatingCommandTimers: [],
+    reconnectTimer: null,
+    connectTimer: null,
+    reconnectAttempt: 0,
+    hasSpawnedOnce: false,
+    shouldReportReconnect: false
+  }
+}
+
+function connect (session) {
+  clearTimeout(session.reconnectTimer)
+  clearTimeout(session.connectTimer)
+  session.reconnectTimer = null
+  session.connectTimer = null
+
+  sessionLog(session, `Connecting to ${config.host}:${config.port} as ${session.account.username} (${session.account.auth})`)
+
+  session.bot = mineflayer.createBot({
     host: config.host,
     port: config.port,
-    username: config.username,
-    auth: config.auth,
+    username: session.account.username,
+    auth: session.account.auth,
     version: config.version,
-    profilesFolder: path.resolve(__dirname, config.profilesFolder),
+    profilesFolder: path.resolve(__dirname, session.account.profilesFolder),
     keepAlive: true,
     checkTimeoutInterval: 30 * 1000,
     respawn: true
   })
 
-  bot.once('login', () => {
-    log('Logged in.')
-    reconnectAttempt = 0
+  session.bot.once('login', () => {
+    sessionLog(session, 'Logged in.')
+    session.reconnectAttempt = 0
   })
 
-  bot.once('spawn', () => {
-    log('Spawned. AFK loop is active.')
-    if (shouldReportReconnect) {
-      sendStatusWebhook('Reconnected', `Bot ${config.username} reconnected to ${config.host}:${config.port}.`)
-        .catch((err) => log(`Webhook failed: ${err.message || err}`))
-      shouldReportReconnect = false
+  session.bot.once('spawn', () => {
+    sessionLog(session, 'Spawned. AFK loop is active.')
+    if (session.shouldReportReconnect) {
+      sendStatusWebhook(session, 'Reconnected', `Bot ${session.account.username} reconnected to ${config.host}:${config.port}.`)
+        .catch((err) => sessionLog(session, `Webhook failed: ${err.message || err}`))
+      session.shouldReportReconnect = false
     }
-    hasSpawnedOnce = true
-    runCommandsAfterSpawn()
-    startRepeatingCommands()
-    startAfkLoop()
+    session.hasSpawnedOnce = true
+    runCommandsAfterSpawn(session)
+    startRepeatingCommands(session)
+    startAfkLoop(session)
   })
 
-  bot.on('message', (message) => {
+  session.bot.on('message', (message) => {
     const text = message.toString().trim()
-    if (text) log(`[CHAT] ${text}`)
-    handleShardMessage(text).catch((err) => log(`Webhook failed: ${err.message || err}`))
+    if (text) sessionLog(session, `[CHAT] ${text}`)
+    handleShardMessage(session, text).catch((err) => sessionLog(session, `Webhook failed: ${err.message || err}`))
   })
 
-  bot.on('kicked', (reason) => {
-    log(`Kicked: ${formatReason(reason)}`)
+  session.bot.on('kicked', (reason) => {
+    sessionLog(session, `Kicked: ${formatReason(reason)}`)
   })
 
-  bot.on('error', (err) => {
-    log(`Error: ${err.message || err}`)
+  session.bot.on('error', (err) => {
+    sessionLog(session, `Error: ${err.message || err}`)
   })
 
-  bot.once('end', (reason) => {
+  session.bot.once('end', (reason) => {
     const disconnectReason = reason || 'socketClosed'
-    log(`Disconnected: ${disconnectReason}`)
-    if (!shuttingDown && hasSpawnedOnce) {
-      shouldReportReconnect = true
-      sendStatusWebhook('Disconnected', `Bot ${config.username} disconnected from ${config.host}:${config.port}. Reason: ${disconnectReason}`)
-        .catch((err) => log(`Webhook failed: ${err.message || err}`))
+    sessionLog(session, `Disconnected: ${disconnectReason}`)
+    if (!shuttingDown && session.hasSpawnedOnce) {
+      session.shouldReportReconnect = true
+      sendStatusWebhook(session, 'Disconnected', `Bot ${session.account.username} disconnected from ${config.host}:${config.port}. Reason: ${disconnectReason}`)
+        .catch((err) => sessionLog(session, `Webhook failed: ${err.message || err}`))
     }
-    stopAfkLoop()
-    stopRepeatingCommands()
-    bot = null
-    scheduleReconnect()
+    stopAfkLoop(session)
+    stopRepeatingCommands(session)
+    session.bot = null
+    scheduleReconnect(session)
   })
 
-  bot.on('death', () => {
-    log('Bot died. Mineflayer will respawn automatically when the server allows it.')
+  session.bot.on('death', () => {
+    sessionLog(session, 'Bot died. Mineflayer will respawn automatically when the server allows it.')
   })
 }
 
-function startAfkLoop () {
-  stopAfkLoop()
+function startAfkLoop (session) {
+  stopAfkLoop(session)
 
   if (!config.afk.enabled) {
-    log('AFK actions are disabled in config.')
+    sessionLog(session, 'AFK actions are disabled in config.')
     return
   }
 
-  afkTimer = setInterval(() => {
-    if (!bot || !bot.entity) return
-    doAfkAction().catch((err) => log(`AFK action failed: ${err.message || err}`))
+  session.afkTimer = setInterval(() => {
+    if (!session.bot || !session.bot.entity) return
+    doAfkAction(session).catch((err) => sessionLog(session, `AFK action failed: ${err.message || err}`))
   }, config.afk.intervalMs)
 
-  doAfkAction().catch((err) => log(`AFK action failed: ${err.message || err}`))
+  doAfkAction(session).catch((err) => sessionLog(session, `AFK action failed: ${err.message || err}`))
 }
 
-function stopAfkLoop () {
-  if (afkTimer) clearInterval(afkTimer)
-  afkTimer = null
+function stopAfkLoop (session) {
+  if (session.afkTimer) clearInterval(session.afkTimer)
+  session.afkTimer = null
 }
 
-async function doAfkAction () {
+async function doAfkAction (session) {
+  const bot = session.bot
   if (!bot || !bot.entity) return
 
   if (config.afk.lookAround) {
@@ -157,25 +193,25 @@ async function doAfkAction () {
   if (config.afk.jump) {
     bot.setControlState('jump', true)
     setTimeout(() => {
-      if (bot) bot.setControlState('jump', false)
+      if (session.bot) session.bot.setControlState('jump', false)
     }, 350)
   }
 }
 
-function runCommandsAfterSpawn () {
-  config.commandsAfterSpawn.forEach((command, index) => {
+function runCommandsAfterSpawn (session) {
+  session.account.commandsAfterSpawn.forEach((command, index) => {
     const cleanCommand = String(command || '').trim()
     if (!cleanCommand) return
 
     setTimeout(() => {
-      if (!bot) return
-      sendCommand(cleanCommand, 'Running command after spawn')
+      if (!session.bot) return
+      sendCommand(session, cleanCommand, 'Running command after spawn')
     }, 2500 + (index * 2500))
   })
 }
 
-function startRepeatingCommands () {
-  stopRepeatingCommands()
+function startRepeatingCommands (session) {
+  stopRepeatingCommands(session)
 
   for (const entry of config.repeatingCommands) {
     const command = String(entry.command || '').trim()
@@ -184,32 +220,32 @@ function startRepeatingCommands () {
 
     if (!command || intervalMs < 1000) continue
 
-    const run = () => sendCommand(command, 'Running repeating command')
+    const run = () => sendCommand(session, command, 'Running repeating command')
     const initialTimer = setTimeout(() => {
       run()
       const intervalTimer = setInterval(run, intervalMs)
-      repeatingCommandTimers.push(intervalTimer)
+      session.repeatingCommandTimers.push(intervalTimer)
     }, initialDelayMs)
 
-    repeatingCommandTimers.push(initialTimer)
-    log(`Scheduled repeating command ${redactCommand(normalizeCommand(command))} every ${Math.round(intervalMs / 1000)}s.`)
+    session.repeatingCommandTimers.push(initialTimer)
+    sessionLog(session, `Scheduled repeating command ${redactCommand(normalizeCommand(command))} every ${Math.round(intervalMs / 1000)}s.`)
   }
 }
 
-function stopRepeatingCommands () {
-  for (const timer of repeatingCommandTimers) {
+function stopRepeatingCommands (session) {
+  for (const timer of session.repeatingCommandTimers) {
     clearTimeout(timer)
     clearInterval(timer)
   }
 
-  repeatingCommandTimers = []
+  session.repeatingCommandTimers = []
 }
 
-function sendCommand (command, label) {
-  if (!bot) return
+function sendCommand (session, command, label) {
+  if (!session.bot) return
   const message = normalizeCommand(command)
-  log(`${label}: ${redactCommand(message)}`)
-  bot.chat(message)
+  sessionLog(session, `${label}: ${redactCommand(message)}`)
+  session.bot.chat(message)
 }
 
 function normalizeCommand (command) {
@@ -226,22 +262,22 @@ function redactCommand (message) {
   return message
 }
 
-async function handleShardMessage (text) {
+async function handleShardMessage (session, text) {
   const match = text.match(/\bYour\s+shards:\s*([\d,]+)/i)
   if (!match) return
 
   const shards = match[1].replace(/,/g, '')
-  await sendShardWebhook(shards)
+  await sendShardWebhook(session, shards)
 }
 
-async function sendShardWebhook (shards) {
-  await sendDiscordWebhook(`Shards ${config.username}: ${shards}`)
-  log(`Sent shards count to Discord: ${shards}`)
+async function sendShardWebhook (session, shards) {
+  await sendDiscordWebhook(`Shards ${session.account.username}: ${shards}`)
+  sessionLog(session, `Sent shards count to Discord: ${shards}`)
 }
 
-async function sendStatusWebhook (title, details) {
+async function sendStatusWebhook (session, title, details) {
   await sendDiscordWebhook(`**${title}**\n${details}`)
-  log(`Sent ${title.toLowerCase()} status to Discord.`)
+  sessionLog(session, `Sent ${title.toLowerCase()} status to Discord.`)
 }
 
 async function sendDiscordWebhook (content) {
@@ -264,17 +300,17 @@ async function sendDiscordWebhook (content) {
   }
 }
 
-function scheduleReconnect () {
+function scheduleReconnect (session) {
   if (shuttingDown || !config.reconnect.enabled) return
 
-  reconnectAttempt += 1
+  session.reconnectAttempt += 1
   const delay = Math.min(
     config.reconnect.maxDelayMs,
-    Math.round(config.reconnect.minDelayMs * Math.pow(config.reconnect.backoffFactor, reconnectAttempt - 1))
+    Math.round(config.reconnect.minDelayMs * Math.pow(config.reconnect.backoffFactor, session.reconnectAttempt - 1))
   )
 
-  log(`Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempt}).`)
-  reconnectTimer = setTimeout(connect, delay)
+  sessionLog(session, `Reconnecting in ${Math.round(delay / 1000)}s (attempt ${session.reconnectAttempt}).`)
+  session.reconnectTimer = setTimeout(() => connect(session), delay)
 }
 
 function formatReason (reason) {
@@ -286,6 +322,10 @@ function formatReason (reason) {
   }
 }
 
+function sessionLog (session, message) {
+  log(`[${session.account.username}] ${message}`)
+}
+
 function log (message) {
   console.log(`[${new Date().toISOString()}] ${message}`)
 }
@@ -293,13 +333,17 @@ function log (message) {
 function shutdown () {
   if (shuttingDown) return
   shuttingDown = true
-  stopAfkLoop()
-  stopRepeatingCommands()
-  clearTimeout(reconnectTimer)
 
-  if (bot) {
-    log('Stopping bot...')
-    bot.quit('Stopping AFK bot')
+  for (const session of sessions) {
+    stopAfkLoop(session)
+    stopRepeatingCommands(session)
+    clearTimeout(session.reconnectTimer)
+    clearTimeout(session.connectTimer)
+
+    if (session.bot) {
+      sessionLog(session, 'Stopping bot...')
+      session.bot.quit('Stopping AFK bot')
+    }
   }
 
   setTimeout(() => process.exit(0), 500)

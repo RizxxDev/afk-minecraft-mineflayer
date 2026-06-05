@@ -1,10 +1,22 @@
 {
   "host": "localhost",
   "port": 25565,
-  "username": "AFKBot",
-  "auth": "offline",
   "version": false,
-  "profilesFolder": "./auth-cache",
+  "connectStaggerMs": 5000,
+  "accounts": [
+    {
+      "username": "AFKBot1",
+      "auth": "offline",
+      "profilesFolder": "./auth-cache/AFKBot1",
+      "commandsAfterSpawn": []
+    },
+    {
+      "username": "AFKBot2",
+      "auth": "offline",
+      "profilesFolder": "./auth-cache/AFKBot2",
+      "commandsAfterSpawn": []
+    }
+  ],
   "reconnect": {
     "enabled": true,
     "minDelayMs": 5000,
@@ -18,7 +30,6 @@
     "swingArm": true,
     "jump": false
   },
-  "commandsAfterSpawn": [],
   "repeatingCommands": [
     {
       "command": "/shards",
