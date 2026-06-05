@@ -1,0 +1,98 @@
+# Minecraft AFK Reconnect Bot
+
+Bot AFK sederhana untuk Minecraft Java Edition, dibuat untuk server milik sendiri/private atau server yang memang mengizinkan bot AFK. Jangan dipakai untuk melanggar aturan server publik.
+
+## Fitur
+
+- Auto reconnect saat disconnect atau kick.
+- Delay reconnect memakai backoff agar tidak spam login.
+- Bisa pakai `offline` auth untuk server offline-mode atau `microsoft` untuk akun resmi.
+- Aksi AFK ringan: lihat sekitar, swing arm, dan opsional jump.
+- Bisa menjalankan command setelah spawn, misalnya `/login password` untuk server private offline-mode.
+
+## Cara Pakai
+
+1. Install Node.js 18 atau lebih baru.
+2. Buka terminal di folder ini.
+3. Jalankan:
+
+```bash
+npm install
+copy config.example.json config.json
+npm start
+```
+
+Di PowerShell, kalau `copy` tidak cocok:
+
+```powershell
+Copy-Item config.example.json config.json
+```
+
+## Konfigurasi
+
+Edit `config.json`:
+
+```json
+{
+  "host": "play.example.com",
+  "port": 25565,
+  "username": "NamaBot",
+  "auth": "microsoft",
+  "version": false
+}
+```
+
+Untuk server offline-mode/private:
+
+```json
+{
+  "username": "AFKBot",
+  "auth": "offline"
+}
+```
+
+Untuk server yang butuh login command setelah masuk, isi:
+
+```json
+{
+  "commandsAfterSpawn": ["/login password_kamu"]
+}
+```
+
+Simpan password hanya di komputer/server yang kamu percaya.
+
+## Kirim Shards ke Discord
+
+Jika chat server mengirim pesan seperti `Your shards: 181`, bot bisa mengirim jumlahnya ke Discord webhook:
+
+```json
+{
+  "discordWebhook": {
+    "enabled": true,
+    "url": "https://discord.com/api/webhooks/...",
+    "username": "Minecraft Shards"
+  }
+}
+```
+
+Jaga URL webhook seperti password. Siapa pun yang punya URL itu bisa mengirim pesan ke channel Discord tersebut.
+
+Webhook yang sama juga dipakai untuk memberi tahu saat bot disconnect dan saat bot berhasil reconnect.
+
+## Jalan 24/7
+
+Paling stabil jalankan di VPS, komputer rumah yang selalu menyala, atau panel hosting yang mendukung Node.js.
+
+Dengan PM2:
+
+```bash
+npm install -g pm2
+pm2 start index.js --name minecraft-afk
+pm2 save
+```
+
+## Catatan
+
+- Ini untuk Minecraft Java Edition. Untuk Bedrock perlu pendekatan/library berbeda.
+- Jika `auth` adalah `microsoft`, login pertama biasanya meminta kode di browser. Setelah sukses, token disimpan di folder `auth-cache`.
+- Beberapa server menolak bot atau punya aturan AFK. Ikuti aturan server.

@@ -1,0 +1,5 @@
+node_modules/
+auth-cache/
+config.json
+*.zip
+npm-debug.log*

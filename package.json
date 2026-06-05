@@ -1,0 +1,16 @@
+{
+  "name": "minecraft-afk-reconnect-bot",
+  "version": "1.0.0",
+  "description": "Simple Minecraft Java AFK bot with automatic reconnect.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js"
+  },
+  "dependencies": {
+    "mineflayer": "latest"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

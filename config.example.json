@@ -1,0 +1,34 @@
+{
+  "host": "localhost",
+  "port": 25565,
+  "username": "AFKBot",
+  "auth": "offline",
+  "version": false,
+  "profilesFolder": "./auth-cache",
+  "reconnect": {
+    "enabled": true,
+    "minDelayMs": 5000,
+    "maxDelayMs": 60000,
+    "backoffFactor": 1.6
+  },
+  "afk": {
+    "enabled": true,
+    "intervalMs": 45000,
+    "lookAround": true,
+    "swingArm": true,
+    "jump": false
+  },
+  "commandsAfterSpawn": [],
+  "repeatingCommands": [
+    {
+      "command": "/shards",
+      "intervalMs": 3600000,
+      "initialDelayMs": 3600000
+    }
+  ],
+  "discordWebhook": {
+    "enabled": false,
+    "url": "",
+    "username": "Minecraft Shards"
+  }
+}
