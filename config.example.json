@@ -49,7 +49,6 @@
   "shardAfkGuard": {
     "enabled": true,
     "checkAfterSpawnMs": 30000,
-    "countdownWaitMs": 8000,
     "afkCommand": "/afk",
     "guiWaitMs": 10000,
     "clickSlot": 0,

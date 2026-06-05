@@ -43,7 +43,6 @@ function loadConfig () {
     shardAfkGuard: {
       enabled: parsed.shardAfkGuard?.enabled !== false,
       checkAfterSpawnMs: Number(parsed.shardAfkGuard?.checkAfterSpawnMs || 30000),
-      countdownWaitMs: Number(parsed.shardAfkGuard?.countdownWaitMs || 8000),
       afkCommand: parsed.shardAfkGuard?.afkCommand || '/afk',
       guiWaitMs: Number(parsed.shardAfkGuard?.guiWaitMs || 10000),
       clickSlot: parsed.shardAfkGuard?.clickSlot === null ? null : Number(parsed.shardAfkGuard?.clickSlot ?? 0),
@@ -118,9 +117,9 @@ function createSession (account, index) {
     reconnectTimer: null,
     connectTimer: null,
     initialShardCountdownTimer: null,
-    shardCountdownTimer: null,
     afkGuiTimer: null,
     lastShardCountdownAt: 0,
+    shardAfkGuardDone: false,
     pendingAfkGuiClick: false,
     reconnectAttempt: 0,
     hasSpawnedOnce: false,
@@ -347,10 +346,6 @@ function sendCommand (session, command, label) {
   const message = normalizeCommand(command)
   sessionLog(session, `${label}: ${redactCommand(message)}`)
   session.bot.chat(message)
-
-  if (/^\/shards\b/i.test(message)) {
-    scheduleShardCountdownCheck(session)
-  }
 }
 
 function normalizeCommand (command) {
@@ -376,42 +371,35 @@ async function handleShardMessage (session, text) {
 }
 
 function handleShardCountdown (session, text) {
+  if (session.shardAfkGuardDone) return
+
   if (!/\bNext\s+shard\s+in\s+\d+\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes)\b/i.test(text)) {
     return
   }
 
   session.lastShardCountdownAt = Date.now()
   clearTimeout(session.initialShardCountdownTimer)
-  clearTimeout(session.shardCountdownTimer)
   session.initialShardCountdownTimer = null
-  session.shardCountdownTimer = null
+  session.shardAfkGuardDone = true
   sessionLog(session, 'Shard countdown detected.')
 }
 
 function scheduleInitialShardCountdownCheck (session) {
-  if (!config.shardAfkGuard.enabled || config.shardAfkGuard.checkAfterSpawnMs < 1000) return
+  if (
+    !config.shardAfkGuard.enabled ||
+    session.shardAfkGuardDone ||
+    config.shardAfkGuard.checkAfterSpawnMs < 1000
+  ) return
 
   clearTimeout(session.initialShardCountdownTimer)
   const startedAt = Date.now()
 
   session.initialShardCountdownTimer = setTimeout(() => {
     session.initialShardCountdownTimer = null
-    if (session.lastShardCountdownAt >= startedAt) return
+    if (session.lastShardCountdownAt >= startedAt || session.shardAfkGuardDone) return
+    session.shardAfkGuardDone = true
     enterAfkArea(session, 'No shard countdown detected after spawn, opening AFK GUI')
   }, config.shardAfkGuard.checkAfterSpawnMs)
-}
-
-function scheduleShardCountdownCheck (session) {
-  if (!config.shardAfkGuard.enabled) return
-
-  clearTimeout(session.shardCountdownTimer)
-  const startedAt = Date.now()
-
-  session.shardCountdownTimer = setTimeout(() => {
-    session.shardCountdownTimer = null
-    if (session.lastShardCountdownAt >= startedAt) return
-    enterAfkArea(session, 'No shard countdown found after /shards, opening AFK GUI')
-  }, config.shardAfkGuard.countdownWaitMs)
 }
 
 function enterAfkArea (session, label) {
@@ -502,10 +490,8 @@ function stripMinecraftJsonText (value) {
 
 function stopShardAfkGuard (session) {
   clearTimeout(session.initialShardCountdownTimer)
-  clearTimeout(session.shardCountdownTimer)
   clearTimeout(session.afkGuiTimer)
   session.initialShardCountdownTimer = null
-  session.shardCountdownTimer = null
   session.afkGuiTimer = null
   session.pendingAfkGuiClick = false
 }
