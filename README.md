@@ -94,12 +94,28 @@ Untuk menjalankan lebih dari 1 akun, tambah objek baru di `accounts`. Setiap aku
       "username": "akun1",
       "auth": "offline",
       "profilesFolder": "./auth-cache/akun1",
+      "proxy": {
+        "enabled": false,
+        "host": "",
+        "port": 1080,
+        "type": 5,
+        "username": "",
+        "password": ""
+      },
       "commandsAfterSpawn": ["/login password1", "/server donutsmp"]
     },
     {
       "username": "akun2",
       "auth": "offline",
       "profilesFolder": "./auth-cache/akun2",
+      "proxy": {
+        "enabled": true,
+        "host": "127.0.0.1",
+        "port": 1080,
+        "type": 5,
+        "username": "",
+        "password": ""
+      },
       "commandsAfterSpawn": ["/login password2", "/server donutsmp"]
     }
   ]
@@ -107,6 +123,27 @@ Untuk menjalankan lebih dari 1 akun, tambah objek baru di `accounts`. Setiap aku
 ```
 
 Bot otomatis memberi jeda login antar akun memakai `connectStaggerMs`, default 5000 ms.
+
+## Proxy Per Akun
+
+Proxy bersifat opsional dan disetel per akun. Jika `enabled` adalah `false`, akun login langsung tanpa proxy.
+
+```json
+{
+  "username": "akun1",
+  "auth": "offline",
+  "proxy": {
+    "enabled": true,
+    "host": "proxy.example.com",
+    "port": 1080,
+    "type": 5,
+    "username": "user_proxy",
+    "password": "password_proxy"
+  }
+}
+```
+
+`type` bisa `5`, `"socks5"`, `4`, atau `"socks4"`. Untuk proxy tanpa username/password, kosongkan saja field itu. Proxy ini dipakai untuk koneksi Minecraft ke server; untuk akun Microsoft, proses auth browser/token bisa tetap memakai koneksi normal tergantung library auth.
 
 ## Kirim Shards ke Discord
 

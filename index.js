@@ -1,6 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const mineflayer = require('mineflayer')
+const { SocksClient } = require('socks')
 
 const configPath = path.join(__dirname, 'config.json')
 const exampleConfigPath = path.join(__dirname, 'config.example.json')
@@ -18,10 +19,11 @@ function loadConfig () {
   const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
   const commandsAfterSpawn = Array.isArray(parsed.commandsAfterSpawn) ? parsed.commandsAfterSpawn : []
   const connectStaggerMs = Number(parsed.connectStaggerMs || 5000)
-  const accounts = normalizeAccounts(parsed, commandsAfterSpawn, connectStaggerMs)
+  const host = parsed.host || 'localhost'
+  const accounts = normalizeAccounts(parsed, commandsAfterSpawn, connectStaggerMs, host)
 
   return {
-    host: parsed.host || 'localhost',
+    host,
     port: Number(parsed.port || 25565),
     version: parsed.version === undefined ? false : parsed.version,
     connectStaggerMs,
@@ -48,7 +50,7 @@ function loadConfig () {
   }
 }
 
-function normalizeAccounts (parsed, defaultCommandsAfterSpawn, connectStaggerMs) {
+function normalizeAccounts (parsed, defaultCommandsAfterSpawn, connectStaggerMs, host) {
   const rawAccounts = Array.isArray(parsed.accounts) && parsed.accounts.length > 0
     ? parsed.accounts
     : [{
@@ -65,8 +67,34 @@ function normalizeAccounts (parsed, defaultCommandsAfterSpawn, connectStaggerMs)
     connectDelayMs: Number(account.connectDelayMs ?? (index * connectStaggerMs)),
     commandsAfterSpawn: Array.isArray(account.commandsAfterSpawn)
       ? account.commandsAfterSpawn
-      : defaultCommandsAfterSpawn
+      : defaultCommandsAfterSpawn,
+    proxy: normalizeProxy(account.proxy, host)
   }))
+}
+
+function normalizeProxy (proxy, serverHost) {
+  if (!proxy || proxy.enabled !== true) return null
+
+  const proxyHost = String(proxy.host || '').trim()
+  const port = Number(proxy.port || 0)
+  const type = normalizeProxyType(proxy.type || proxy.protocol || 5)
+  if (!proxyHost || !port || !type) return null
+
+  return {
+    host: proxyHost,
+    port,
+    type,
+    userId: proxy.username || proxy.userId || '',
+    password: proxy.password || '',
+    fakeHost: proxy.fakeHost === false ? false : (proxy.fakeHost || serverHost)
+  }
+}
+
+function normalizeProxyType (type) {
+  const value = String(type).toLowerCase().replace('socks', '')
+  if (value === '4') return 4
+  if (value === '5') return 5
+  return null
 }
 
 function createSession (account, index) {
@@ -92,9 +120,12 @@ function connect (session) {
 
   sessionLog(session, `Connecting to ${config.host}:${config.port} as ${session.account.username} (${session.account.auth})`)
 
-  session.bot = mineflayer.createBot({
-    host: config.host,
-    port: config.port,
+  session.bot = mineflayer.createBot(createBotOptions(session))
+  attachBotEvents(session)
+}
+
+function createBotOptions (session) {
+  const options = {
     username: session.account.username,
     auth: session.account.auth,
     version: config.version,
@@ -102,14 +133,61 @@ function connect (session) {
     keepAlive: true,
     checkTimeoutInterval: 30 * 1000,
     respawn: true
-  })
+  }
 
-  session.bot.once('login', () => {
+  if (session.account.proxy) {
+    sessionLog(session, `Using SOCKS${session.account.proxy.type} proxy ${formatProxy(session.account.proxy)}.`)
+    options.connect = createProxyConnector(session.account.proxy)
+    if (session.account.proxy.fakeHost) options.fakeHost = session.account.proxy.fakeHost
+    return options
+  }
+
+  options.host = config.host
+  options.port = config.port
+  return options
+}
+
+function createProxyConnector (proxy) {
+  return (client) => {
+    SocksClient.createConnection({
+      proxy: {
+        host: proxy.host,
+        port: proxy.port,
+        type: proxy.type,
+        userId: proxy.userId || undefined,
+        password: proxy.password || undefined
+      },
+      command: 'connect',
+      destination: {
+        host: config.host,
+        port: config.port
+      }
+    }, (err, info) => {
+      if (err) {
+        client.emit('error', err)
+        return
+      }
+
+      client.setSocket(info.socket)
+      client.emit('connect')
+    })
+  }
+}
+
+function formatProxy (proxy) {
+  const auth = proxy.userId ? `${proxy.userId}:******@` : ''
+  return `${auth}${proxy.host}:${proxy.port}`
+}
+
+function attachBotEvents (session) {
+  const bot = session.bot
+
+  bot.once('login', () => {
     sessionLog(session, 'Logged in.')
     session.reconnectAttempt = 0
   })
 
-  session.bot.once('spawn', () => {
+  bot.once('spawn', () => {
     sessionLog(session, 'Spawned. AFK loop is active.')
     if (session.shouldReportReconnect) {
       sendStatusWebhook(session, 'Reconnected', `Bot ${session.account.username} reconnected to ${config.host}:${config.port}.`)
@@ -122,21 +200,21 @@ function connect (session) {
     startAfkLoop(session)
   })
 
-  session.bot.on('message', (message) => {
+  bot.on('message', (message) => {
     const text = message.toString().trim()
     if (text) sessionLog(session, `[CHAT] ${text}`)
     handleShardMessage(session, text).catch((err) => sessionLog(session, `Webhook failed: ${err.message || err}`))
   })
 
-  session.bot.on('kicked', (reason) => {
+  bot.on('kicked', (reason) => {
     sessionLog(session, `Kicked: ${formatReason(reason)}`)
   })
 
-  session.bot.on('error', (err) => {
+  bot.on('error', (err) => {
     sessionLog(session, `Error: ${err.message || err}`)
   })
 
-  session.bot.once('end', (reason) => {
+  bot.once('end', (reason) => {
     const disconnectReason = reason || 'socketClosed'
     sessionLog(session, `Disconnected: ${disconnectReason}`)
     if (!shuttingDown && session.hasSpawnedOnce) {
@@ -150,7 +228,7 @@ function connect (session) {
     scheduleReconnect(session)
   })
 
-  session.bot.on('death', () => {
+  bot.on('death', () => {
     sessionLog(session, 'Bot died. Mineflayer will respawn automatically when the server allows it.')
   })
 }

@@ -8,12 +8,28 @@
       "username": "AFKBot1",
       "auth": "offline",
       "profilesFolder": "./auth-cache/AFKBot1",
+      "proxy": {
+        "enabled": false,
+        "host": "",
+        "port": 1080,
+        "type": 5,
+        "username": "",
+        "password": ""
+      },
       "commandsAfterSpawn": []
     },
     {
       "username": "AFKBot2",
       "auth": "offline",
       "profilesFolder": "./auth-cache/AFKBot2",
+      "proxy": {
+        "enabled": false,
+        "host": "",
+        "port": 1080,
+        "type": 5,
+        "username": "",
+        "password": ""
+      },
       "commandsAfterSpawn": []
     }
   ],
