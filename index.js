@@ -42,6 +42,7 @@ function loadConfig () {
     },
     shardAfkGuard: {
       enabled: parsed.shardAfkGuard?.enabled !== false,
+      checkAfterSpawnMs: Number(parsed.shardAfkGuard?.checkAfterSpawnMs || 30000),
       countdownWaitMs: Number(parsed.shardAfkGuard?.countdownWaitMs || 8000),
       afkCommand: parsed.shardAfkGuard?.afkCommand || '/afk',
       guiWaitMs: Number(parsed.shardAfkGuard?.guiWaitMs || 10000),
@@ -116,6 +117,7 @@ function createSession (account, index) {
     repeatingCommandTimers: [],
     reconnectTimer: null,
     connectTimer: null,
+    initialShardCountdownTimer: null,
     shardCountdownTimer: null,
     afkGuiTimer: null,
     lastShardCountdownAt: 0,
@@ -212,6 +214,7 @@ function attachBotEvents (session) {
     runCommandsAfterSpawn(session)
     startRepeatingCommands(session)
     startAfkLoop(session)
+    scheduleInitialShardCountdownCheck(session)
   })
 
   bot.on('message', (message) => {
@@ -378,9 +381,24 @@ function handleShardCountdown (session, text) {
   }
 
   session.lastShardCountdownAt = Date.now()
+  clearTimeout(session.initialShardCountdownTimer)
   clearTimeout(session.shardCountdownTimer)
+  session.initialShardCountdownTimer = null
   session.shardCountdownTimer = null
   sessionLog(session, 'Shard countdown detected.')
+}
+
+function scheduleInitialShardCountdownCheck (session) {
+  if (!config.shardAfkGuard.enabled || config.shardAfkGuard.checkAfterSpawnMs < 1000) return
+
+  clearTimeout(session.initialShardCountdownTimer)
+  const startedAt = Date.now()
+
+  session.initialShardCountdownTimer = setTimeout(() => {
+    session.initialShardCountdownTimer = null
+    if (session.lastShardCountdownAt >= startedAt) return
+    enterAfkArea(session, 'No shard countdown detected after spawn, opening AFK GUI')
+  }, config.shardAfkGuard.checkAfterSpawnMs)
 }
 
 function scheduleShardCountdownCheck (session) {
@@ -392,11 +410,11 @@ function scheduleShardCountdownCheck (session) {
   session.shardCountdownTimer = setTimeout(() => {
     session.shardCountdownTimer = null
     if (session.lastShardCountdownAt >= startedAt) return
-    enterAfkArea(session)
+    enterAfkArea(session, 'No shard countdown found after /shards, opening AFK GUI')
   }, config.shardAfkGuard.countdownWaitMs)
 }
 
-function enterAfkArea (session) {
+function enterAfkArea (session, label) {
   if (!session.bot) return
 
   session.pendingAfkGuiClick = true
@@ -408,7 +426,7 @@ function enterAfkArea (session) {
     }
   }, config.shardAfkGuard.guiWaitMs)
 
-  sendCommand(session, config.shardAfkGuard.afkCommand, 'No shard countdown found, opening AFK GUI')
+  sendCommand(session, config.shardAfkGuard.afkCommand, label)
 }
 
 async function handleAfkWindow (session, window) {
@@ -483,8 +501,10 @@ function stripMinecraftJsonText (value) {
 }
 
 function stopShardAfkGuard (session) {
+  clearTimeout(session.initialShardCountdownTimer)
   clearTimeout(session.shardCountdownTimer)
   clearTimeout(session.afkGuiTimer)
+  session.initialShardCountdownTimer = null
   session.shardCountdownTimer = null
   session.afkGuiTimer = null
   session.pendingAfkGuiClick = false

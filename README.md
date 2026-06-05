@@ -165,12 +165,13 @@ Webhook yang sama juga dipakai untuk memberi tahu saat bot disconnect dan saat b
 
 ## Auto Masuk AFK Jika Countdown Shard Tidak Ada
 
-Setelah bot menjalankan `/shards`, bot menunggu pesan seperti `Next shard in 60s`. Jika pesan countdown itu tidak muncul dalam `countdownWaitMs`, bot akan menjalankan `/afk`, menunggu GUI terbuka, lalu klik slot `clickSlot`.
+Setelah bot spawn, bot menunggu pesan seperti `Next shard in 60s`. Jika countdown belum diterima dalam `checkAfterSpawnMs`, bot akan menjalankan `/afk`, menunggu GUI terbuka, lalu klik slot `clickSlot`. Hal yang sama juga dicek setiap bot menjalankan `/shards`.
 
 ```json
 {
   "shardAfkGuard": {
     "enabled": true,
+    "checkAfterSpawnMs": 30000,
     "countdownWaitMs": 8000,
     "afkCommand": "/afk",
     "guiWaitMs": 10000,
