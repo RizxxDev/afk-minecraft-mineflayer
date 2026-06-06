@@ -33,6 +33,14 @@ function loadConfig () {
       maxDelayMs: Number(parsed.reconnect?.maxDelayMs || 60000),
       backoffFactor: Number(parsed.reconnect?.backoffFactor || 1.6)
     },
+    networkOptimization: {
+      enabled: parsed.networkOptimization?.enabled !== false,
+      viewDistance: parsed.networkOptimization?.viewDistance ?? 2,
+      checkTimeoutIntervalMs: Number(parsed.networkOptimization?.checkTimeoutIntervalMs || 90000),
+      chat: parsed.networkOptimization?.chat || 'enabled',
+      colorsEnabled: parsed.networkOptimization?.colorsEnabled === true,
+      hideSkinParts: parsed.networkOptimization?.hideSkinParts !== false
+    },
     afk: {
       enabled: parsed.afk?.enabled !== false,
       intervalMs: Number(parsed.afk?.intervalMs || 45000),
@@ -146,7 +154,11 @@ function createBotOptions (session) {
     version: config.version,
     profilesFolder: path.resolve(__dirname, session.account.profilesFolder),
     keepAlive: true,
-    checkTimeoutInterval: 30 * 1000,
+    checkTimeoutInterval: config.networkOptimization.checkTimeoutIntervalMs,
+    viewDistance: config.networkOptimization.viewDistance,
+    chat: config.networkOptimization.chat,
+    colorsEnabled: config.networkOptimization.colorsEnabled,
+    skinParts: getSkinPartsSetting(),
     respawn: true
   }
 
@@ -204,6 +216,7 @@ function attachBotEvents (session) {
 
   bot.once('spawn', () => {
     sessionLog(session, 'Spawned. AFK loop is active.')
+    applyNetworkOptimization(session)
     if (session.shouldReportReconnect) {
       sendStatusWebhook(session, 'Reconnected', `Bot ${session.account.username} reconnected to ${config.host}:${config.port}.`)
         .catch((err) => sessionLog(session, `Webhook failed: ${err.message || err}`))
@@ -253,6 +266,32 @@ function attachBotEvents (session) {
   bot.on('death', () => {
     sessionLog(session, 'Bot died. Mineflayer will respawn automatically when the server allows it.')
   })
+}
+
+function applyNetworkOptimization (session) {
+  if (!config.networkOptimization.enabled || !session.bot?.setSettings) return
+
+  session.bot.setSettings({
+    viewDistance: config.networkOptimization.viewDistance,
+    chat: config.networkOptimization.chat,
+    colorsEnabled: config.networkOptimization.colorsEnabled,
+    skinParts: getSkinPartsSetting(),
+    enableServerListing: false
+  })
+  sessionLog(session, `Network optimization active: viewDistance=${config.networkOptimization.viewDistance}, timeout=${config.networkOptimization.checkTimeoutIntervalMs}ms.`)
+}
+
+function getSkinPartsSetting () {
+  const visible = !config.networkOptimization.hideSkinParts
+  return {
+    showCape: visible,
+    showJacket: visible,
+    showLeftSleeve: visible,
+    showRightSleeve: visible,
+    showLeftPants: visible,
+    showRightPants: visible,
+    showHat: visible
+  }
 }
 
 function startAfkLoop (session) {

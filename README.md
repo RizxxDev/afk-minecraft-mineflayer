@@ -145,6 +145,32 @@ Proxy bersifat opsional dan disetel per akun. Jika `enabled` adalah `false`, aku
 
 `type` bisa `5`, `"socks5"`, `4`, atau `"socks4"`. Untuk proxy tanpa username/password, kosongkan saja field itu. Proxy ini dipakai untuk koneksi Minecraft ke server; untuk akun Microsoft, proses auth browser/token bisa tetap memakai koneksi normal tergantung library auth.
 
+## Hemat Bandwidth
+
+Untuk banyak akun, gunakan setting ini agar bot meminta chunk lebih sedikit dan tidak mengirim gerakan AFK kecil terus-menerus:
+
+```json
+{
+  "networkOptimization": {
+    "enabled": true,
+    "viewDistance": 2,
+    "checkTimeoutIntervalMs": 90000,
+    "chat": "enabled",
+    "colorsEnabled": false,
+    "hideSkinParts": true
+  },
+  "afk": {
+    "enabled": false,
+    "intervalMs": 300000,
+    "lookAround": false,
+    "swingArm": false,
+    "jump": false
+  }
+}
+```
+
+`viewDistance: 2` adalah bagian paling terasa. Chat tetap `enabled` karena bot perlu membaca `Your shards` dan `Next shard in ...`.
+
 ## Kirim Shards ke Discord
 
 Jika chat server mengirim pesan seperti `Your shards: 181`, bot bisa mengirim jumlahnya ke Discord webhook:

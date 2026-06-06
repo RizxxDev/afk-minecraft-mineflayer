@@ -39,11 +39,19 @@
     "maxDelayMs": 60000,
     "backoffFactor": 1.6
   },
-  "afk": {
+  "networkOptimization": {
     "enabled": true,
-    "intervalMs": 45000,
-    "lookAround": true,
-    "swingArm": true,
+    "viewDistance": 2,
+    "checkTimeoutIntervalMs": 90000,
+    "chat": "enabled",
+    "colorsEnabled": false,
+    "hideSkinParts": true
+  },
+  "afk": {
+    "enabled": false,
+    "intervalMs": 300000,
+    "lookAround": false,
+    "swingArm": false,
     "jump": false
   },
   "shardAfkGuard": {
