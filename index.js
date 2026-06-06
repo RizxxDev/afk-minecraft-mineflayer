@@ -59,6 +59,14 @@ function loadConfig () {
         ? parsed.shardAfkGuard.itemNames
         : ['AFK 1', 'AfK 1']
     },
+    booster: {
+      enabled: parsed.booster?.enabled !== false,
+      useAfterSpawnMs: Number(parsed.booster?.useAfterSpawnMs || 12000),
+      itemNames: Array.isArray(parsed.booster?.itemNames)
+        ? parsed.booster.itemNames
+        : ['SHARD BOOSTER'],
+      consumeTimeoutMs: Number(parsed.booster?.consumeTimeoutMs || 8000)
+    },
     repeatingCommands: Array.isArray(parsed.repeatingCommands) ? parsed.repeatingCommands : [],
     discordWebhook: {
       enabled: parsed.discordWebhook?.enabled === true,
@@ -128,6 +136,8 @@ function createSession (account, index) {
     connectTimer: null,
     initialShardCountdownTimer: null,
     afkGuiTimer: null,
+    boosterTimer: null,
+    boosterUsed: false,
     lastShardCountdownAt: 0,
     shardAfkGuardDone: false,
     pendingAfkGuiClick: false,
@@ -283,6 +293,7 @@ function attachBotEvents (session) {
     startRepeatingCommands(session)
     startAfkLoop(session)
     scheduleInitialShardCountdownCheck(session)
+    scheduleBoosterUse(session)
   })
 
   bot.on('message', (message) => {
@@ -315,6 +326,7 @@ function attachBotEvents (session) {
     stopAfkLoop(session)
     stopRepeatingCommands(session)
     stopShardAfkGuard(session)
+    stopBoosterUse(session)
     session.bot = null
     scheduleReconnect(session)
   })
@@ -403,6 +415,72 @@ function runCommandsAfterSpawn (session) {
       sendCommand(session, cleanCommand, 'Running command after spawn')
     }, 2500 + (index * 2500))
   })
+}
+
+function scheduleBoosterUse (session) {
+  if (!config.booster.enabled || session.boosterUsed || config.booster.useAfterSpawnMs < 1000) return
+
+  clearTimeout(session.boosterTimer)
+  session.boosterTimer = setTimeout(() => {
+    session.boosterTimer = null
+    useShardBoosterIfPresent(session).catch((err) => sessionLog(session, `Shard booster use failed: ${err.message || err}`))
+  }, config.booster.useAfterSpawnMs)
+}
+
+function stopBoosterUse (session) {
+  clearTimeout(session.boosterTimer)
+  session.boosterTimer = null
+}
+
+async function useShardBoosterIfPresent (session) {
+  if (!session.bot || session.boosterUsed) return
+
+  const booster = findInventoryItemByNames(session.bot, config.booster.itemNames)
+  if (!booster) {
+    sessionLog(session, 'Shard booster not found in inventory.')
+    return
+  }
+
+  session.boosterUsed = true
+  sessionLog(session, `Using shard booster from slot ${booster.slot}.`)
+  await session.bot.equip(booster, 'hand')
+  await consumeHeldItem(session)
+  sessionLog(session, 'Shard booster activated.')
+}
+
+function findInventoryItemByNames (bot, itemNames) {
+  const needles = itemNames.map((name) => String(name).toLowerCase())
+
+  return bot.inventory.items().find((item) => {
+    const labels = getItemLabels(item).map((label) => label.toLowerCase())
+    return labels.some((label) => needles.some((needle) => label.includes(needle)))
+  })
+}
+
+async function consumeHeldItem (session) {
+  try {
+    await withTimeout(session.bot.consume(), config.booster.consumeTimeoutMs, 'consume timed out')
+  } catch (err) {
+    sessionLog(session, `Consume did not complete (${err.message || err}); trying activateItem fallback.`)
+    session.bot.activateItem()
+    await sleep(1500)
+    session.bot.deactivateItem()
+  }
+}
+
+function withTimeout (promise, timeoutMs, message) {
+  let timer = null
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    })
+  ]).finally(() => clearTimeout(timer))
+}
+
+function sleep (ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function startRepeatingCommands (session) {

@@ -62,6 +62,12 @@
     "clickSlot": 0,
     "itemNames": ["AFK 1", "AfK 1"]
   },
+  "booster": {
+    "enabled": true,
+    "useAfterSpawnMs": 12000,
+    "itemNames": ["SHARD BOOSTER"],
+    "consumeTimeoutMs": 8000
+  },
   "repeatingCommands": [
     {
       "command": "/shards",

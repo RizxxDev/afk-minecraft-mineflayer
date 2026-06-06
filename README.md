@@ -210,6 +210,23 @@ Pendeteksian ini hanya berjalan 1x per akun selama proses bot hidup. Setelah cou
 
 Untuk GUI seperti gambar `AFK 1` di kiri atas, `clickSlot: 0` biasanya benar. Bot tetap mencoba mencari item bernama `AFK 1` dulu sebelum fallback ke slot itu.
 
+## Auto Pakai Shard Booster
+
+Jika inventory bot punya potion/item bernama `SHARD BOOSTER`, bot akan equip item itu lalu mencoba minum/menggunakannya sekali setelah spawn. Kalau item tidak ada, bot hanya lanjut biasa.
+
+```json
+{
+  "booster": {
+    "enabled": true,
+    "useAfterSpawnMs": 12000,
+    "itemNames": ["SHARD BOOSTER"],
+    "consumeTimeoutMs": 8000
+  }
+}
+```
+
+Nama item dicek dari display name dan lore NBT, jadi item custom server seperti pada screenshot bisa kebaca.
+
 ## Jalan 24/7
 
 Paling stabil jalankan di VPS, komputer rumah yang selalu menyala, atau panel hosting yang mendukung Node.js.
