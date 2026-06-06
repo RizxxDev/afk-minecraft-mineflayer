@@ -11,8 +11,8 @@
       "proxy": {
         "enabled": false,
         "host": "",
-        "port": 1080,
-        "type": 5,
+        "port": 8080,
+        "type": "http",
         "username": "",
         "password": ""
       },
@@ -25,8 +25,8 @@
       "proxy": {
         "enabled": false,
         "host": "",
-        "port": 1080,
-        "type": 5,
+        "port": 8080,
+        "type": "http",
         "username": "",
         "password": ""
       },

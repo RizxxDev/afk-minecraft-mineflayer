@@ -97,8 +97,8 @@ Untuk menjalankan lebih dari 1 akun, tambah objek baru di `accounts`. Setiap aku
       "proxy": {
         "enabled": false,
         "host": "",
-        "port": 1080,
-        "type": 5,
+        "port": 8080,
+        "type": "http",
         "username": "",
         "password": ""
       },
@@ -111,8 +111,8 @@ Untuk menjalankan lebih dari 1 akun, tambah objek baru di `accounts`. Setiap aku
       "proxy": {
         "enabled": true,
         "host": "127.0.0.1",
-        "port": 1080,
-        "type": 5,
+        "port": 8080,
+        "type": "http",
         "username": "",
         "password": ""
       },
@@ -135,15 +135,15 @@ Proxy bersifat opsional dan disetel per akun. Jika `enabled` adalah `false`, aku
   "proxy": {
     "enabled": true,
     "host": "proxy.example.com",
-    "port": 1080,
-    "type": 5,
+    "port": 8080,
+    "type": "http",
     "username": "user_proxy",
     "password": "password_proxy"
   }
 }
 ```
 
-`type` bisa `5`, `"socks5"`, `4`, atau `"socks4"`. Untuk proxy tanpa username/password, kosongkan saja field itu. Proxy ini dipakai untuk koneksi Minecraft ke server; untuk akun Microsoft, proses auth browser/token bisa tetap memakai koneksi normal tergantung library auth.
+`type` bisa `"http"` untuk HTTP proxy, `5` / `"socks5"`, atau `4` / `"socks4"`. Untuk proxy tanpa username/password, kosongkan saja field itu. Proxy ini dipakai untuk koneksi Minecraft ke server; untuk akun Microsoft, proses auth browser/token bisa tetap memakai koneksi normal tergantung library auth.
 
 ## Hemat Bandwidth
 

@@ -1,4 +1,5 @@
 const fs = require('fs')
+const net = require('net')
 const path = require('path')
 const mineflayer = require('mineflayer')
 const { SocksClient } = require('socks')
@@ -110,6 +111,7 @@ function normalizeProxy (proxy, serverHost) {
 
 function normalizeProxyType (type) {
   const value = String(type).toLowerCase().replace('socks', '')
+  if (value === 'http' || value === 'https' || value === 'connect') return 'http'
   if (value === '4') return 4
   if (value === '5') return 5
   return null
@@ -163,7 +165,7 @@ function createBotOptions (session) {
   }
 
   if (session.account.proxy) {
-    sessionLog(session, `Using SOCKS${session.account.proxy.type} proxy ${formatProxy(session.account.proxy)}.`)
+    sessionLog(session, `Using ${formatProxyType(session.account.proxy.type)} proxy ${formatProxy(session.account.proxy)}.`)
     options.connect = createProxyConnector(session.account.proxy)
     if (session.account.proxy.fakeHost) options.fakeHost = session.account.proxy.fakeHost
     return options
@@ -175,6 +177,11 @@ function createBotOptions (session) {
 }
 
 function createProxyConnector (proxy) {
+  if (proxy.type === 'http') return createHttpProxyConnector(proxy)
+  return createSocksProxyConnector(proxy)
+}
+
+function createSocksProxyConnector (proxy) {
   return (client) => {
     SocksClient.createConnection({
       proxy: {
@@ -199,6 +206,55 @@ function createProxyConnector (proxy) {
       client.emit('connect')
     })
   }
+}
+
+function createHttpProxyConnector (proxy) {
+  return (client) => {
+    const socket = net.connect(proxy.port, proxy.host)
+    const onError = (err) => client.emit('error', err)
+
+    socket.once('error', onError)
+    socket.once('connect', () => {
+      const headers = [
+        `CONNECT ${config.host}:${config.port} HTTP/1.1`,
+        `Host: ${config.host}:${config.port}`,
+        'Proxy-Connection: Keep-Alive'
+      ]
+
+      if (proxy.userId || proxy.password) {
+        const auth = Buffer.from(`${proxy.userId}:${proxy.password}`).toString('base64')
+        headers.push(`Proxy-Authorization: Basic ${auth}`)
+      }
+
+      socket.write(`${headers.join('\r\n')}\r\n\r\n`)
+    })
+
+    let response = ''
+    const onData = (chunk) => {
+      response += chunk.toString('latin1')
+      const headerEnd = response.indexOf('\r\n\r\n')
+      if (headerEnd === -1) return
+
+      socket.removeListener('data', onData)
+      socket.removeListener('error', onError)
+
+      const statusLine = response.slice(0, response.indexOf('\r\n'))
+      if (!/^HTTP\/\d(?:\.\d)?\s+2\d\d\b/.test(statusLine)) {
+        socket.destroy()
+        client.emit('error', new Error(`HTTP proxy CONNECT failed: ${statusLine}`))
+        return
+      }
+
+      client.setSocket(socket)
+      client.emit('connect')
+    }
+
+    socket.on('data', onData)
+  }
+}
+
+function formatProxyType (type) {
+  return type === 'http' ? 'HTTP CONNECT' : `SOCKS${type}`
 }
 
 function formatProxy (proxy) {
