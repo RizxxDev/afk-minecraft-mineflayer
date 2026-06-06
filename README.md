@@ -220,13 +220,13 @@ Jika inventory bot punya potion/item bernama `SHARD BOOSTER`, bot akan equip ite
     "enabled": true,
     "useAfterAfkMs": 12000,
     "confirmAfterAfkClickMs": 10000,
-    "itemNames": ["SHARD BOOSTER"],
+    "itemNames": ["SHARD BOOSTER", "Potion"],
     "consumeTimeoutMs": 8000
   }
 }
 ```
 
-Nama item dicek dari display name dan lore NBT, jadi item custom server seperti pada screenshot bisa kebaca. Jika countdown tidak muncul, bot juga bisa menganggap area AFK sudah tercapai beberapa detik setelah klik GUI AFK berhasil.
+Nama item dicek dari display name dan lore NBT. Jika nama custom tidak kebaca dan item tampil sebagai `Potion`, tambahkan `Potion` di `itemNames` seperti contoh. Jika countdown tidak muncul, bot juga bisa menganggap area AFK sudah tercapai beberapa detik setelah klik GUI AFK berhasil.
 
 ## Jalan 24/7
 
