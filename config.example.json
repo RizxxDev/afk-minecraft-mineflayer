@@ -65,6 +65,7 @@
   "booster": {
     "enabled": true,
     "useAfterAfkMs": 12000,
+    "confirmAfterAfkClickMs": 10000,
     "itemNames": ["SHARD BOOSTER"],
     "consumeTimeoutMs": 8000
   },

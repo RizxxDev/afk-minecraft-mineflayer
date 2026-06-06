@@ -1,5 +1,6 @@
 node_modules/
 auth-cache/
 config.json
+converted-config*.json
 *.zip
 npm-debug.log*

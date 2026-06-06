@@ -62,6 +62,7 @@ function loadConfig () {
     booster: {
       enabled: parsed.booster?.enabled !== false,
       useAfterAfkMs: Number(parsed.booster?.useAfterAfkMs ?? parsed.booster?.useAfterSpawnMs ?? 12000),
+      confirmAfterAfkClickMs: Number(parsed.booster?.confirmAfterAfkClickMs || 10000),
       itemNames: Array.isArray(parsed.booster?.itemNames)
         ? parsed.booster.itemNames
         : ['SHARD BOOSTER'],
@@ -136,6 +137,7 @@ function createSession (account, index) {
     connectTimer: null,
     initialShardCountdownTimer: null,
     afkGuiTimer: null,
+    afkConfirmTimer: null,
     boosterTimer: null,
     boosterUsed: false,
     isInAfkArea: false,
@@ -430,7 +432,9 @@ function scheduleBoosterUse (session) {
 }
 
 function stopBoosterUse (session) {
+  clearTimeout(session.afkConfirmTimer)
   clearTimeout(session.boosterTimer)
+  session.afkConfirmTimer = null
   session.boosterTimer = null
 }
 
@@ -443,7 +447,7 @@ async function useShardBoosterIfPresent (session) {
 
   const booster = findInventoryItemByNames(session.bot, config.booster.itemNames)
   if (!booster) {
-    sessionLog(session, 'Shard booster not found in inventory.')
+    sessionLog(session, `Shard booster not found in inventory. Inventory: ${summarizeInventory(session.bot)}`)
     return
   }
 
@@ -461,6 +465,17 @@ function findInventoryItemByNames (bot, itemNames) {
     const labels = getItemLabels(item).map((label) => label.toLowerCase())
     return labels.some((label) => needles.some((needle) => label.includes(needle)))
   })
+}
+
+function summarizeInventory (bot) {
+  const labels = bot.inventory.items()
+    .slice(0, 20)
+    .map((item) => {
+      const [label] = getItemLabels(item)
+      return label || item.name
+    })
+
+  return labels.length > 0 ? labels.join(', ') : 'empty'
 }
 
 async function consumeHeldItem (session) {
@@ -613,6 +628,21 @@ async function handleAfkWindow (session, window) {
   session.pendingAfkGuiClick = false
   sessionLog(session, `Clicking AFK GUI slot ${slot}.`)
   await session.bot.clickWindow(slot, 0, 0)
+  confirmAfkAreaAfterGuiClick(session)
+}
+
+function confirmAfkAreaAfterGuiClick (session) {
+  if (!config.booster.enabled || session.isInAfkArea) return
+
+  clearTimeout(session.afkConfirmTimer)
+  session.afkConfirmTimer = setTimeout(() => {
+    session.afkConfirmTimer = null
+    if (!session.bot || session.isInAfkArea) return
+
+    session.isInAfkArea = true
+    sessionLog(session, 'AFK area assumed after GUI click.')
+    scheduleBoosterUse(session)
+  }, config.booster.confirmAfterAfkClickMs)
 }
 
 function findAfkClickSlot (window) {
