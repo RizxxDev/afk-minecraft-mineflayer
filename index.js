@@ -61,7 +61,7 @@ function loadConfig () {
     },
     booster: {
       enabled: parsed.booster?.enabled !== false,
-      useAfterSpawnMs: Number(parsed.booster?.useAfterSpawnMs || 12000),
+      useAfterAfkMs: Number(parsed.booster?.useAfterAfkMs ?? parsed.booster?.useAfterSpawnMs ?? 12000),
       itemNames: Array.isArray(parsed.booster?.itemNames)
         ? parsed.booster.itemNames
         : ['SHARD BOOSTER'],
@@ -138,6 +138,7 @@ function createSession (account, index) {
     afkGuiTimer: null,
     boosterTimer: null,
     boosterUsed: false,
+    isInAfkArea: false,
     lastShardCountdownAt: 0,
     shardAfkGuardDone: false,
     pendingAfkGuiClick: false,
@@ -293,7 +294,6 @@ function attachBotEvents (session) {
     startRepeatingCommands(session)
     startAfkLoop(session)
     scheduleInitialShardCountdownCheck(session)
-    scheduleBoosterUse(session)
   })
 
   bot.on('message', (message) => {
@@ -327,6 +327,7 @@ function attachBotEvents (session) {
     stopRepeatingCommands(session)
     stopShardAfkGuard(session)
     stopBoosterUse(session)
+    session.isInAfkArea = false
     session.bot = null
     scheduleReconnect(session)
   })
@@ -418,13 +419,14 @@ function runCommandsAfterSpawn (session) {
 }
 
 function scheduleBoosterUse (session) {
-  if (!config.booster.enabled || session.boosterUsed || config.booster.useAfterSpawnMs < 1000) return
+  if (!config.booster.enabled || session.boosterUsed || !session.isInAfkArea || config.booster.useAfterAfkMs < 1000) return
 
   clearTimeout(session.boosterTimer)
   session.boosterTimer = setTimeout(() => {
     session.boosterTimer = null
     useShardBoosterIfPresent(session).catch((err) => sessionLog(session, `Shard booster use failed: ${err.message || err}`))
-  }, config.booster.useAfterSpawnMs)
+  }, config.booster.useAfterAfkMs)
+  sessionLog(session, `Shard booster scheduled after AFK confirmation in ${Math.round(config.booster.useAfterAfkMs / 1000)}s.`)
 }
 
 function stopBoosterUse (session) {
@@ -434,6 +436,10 @@ function stopBoosterUse (session) {
 
 async function useShardBoosterIfPresent (session) {
   if (!session.bot || session.boosterUsed) return
+  if (!session.isInAfkArea) {
+    sessionLog(session, 'Shard booster skipped because AFK area is not confirmed yet.')
+    return
+  }
 
   const booster = findInventoryItemByNames(session.bot, config.booster.itemNames)
   if (!booster) {
@@ -544,13 +550,16 @@ async function handleShardMessage (session, text) {
 }
 
 function handleShardCountdown (session, text) {
-  if (session.shardAfkGuardDone) return
-
   if (!/\bNext\s+shard\s+in\s+\d+\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes)\b/i.test(text)) {
     return
   }
 
+  session.isInAfkArea = true
   session.lastShardCountdownAt = Date.now()
+  scheduleBoosterUse(session)
+
+  if (session.shardAfkGuardDone) return
+
   clearTimeout(session.initialShardCountdownTimer)
   session.initialShardCountdownTimer = null
   session.shardAfkGuardDone = true

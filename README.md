@@ -212,13 +212,13 @@ Untuk GUI seperti gambar `AFK 1` di kiri atas, `clickSlot: 0` biasanya benar. Bo
 
 ## Auto Pakai Shard Booster
 
-Jika inventory bot punya potion/item bernama `SHARD BOOSTER`, bot akan equip item itu lalu mencoba minum/menggunakannya sekali setelah spawn. Kalau item tidak ada, bot hanya lanjut biasa.
+Jika inventory bot punya potion/item bernama `SHARD BOOSTER`, bot akan equip item itu lalu mencoba minum/menggunakannya setelah bot terkonfirmasi berada di tempat AFK. Konfirmasi ini memakai chat countdown seperti `Next shard in 60s`; kalau countdown belum diterima, booster tidak dieksekusi.
 
 ```json
 {
   "booster": {
     "enabled": true,
-    "useAfterSpawnMs": 12000,
+    "useAfterAfkMs": 12000,
     "itemNames": ["SHARD BOOSTER"],
     "consumeTimeoutMs": 8000
   }

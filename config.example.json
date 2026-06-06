@@ -64,7 +64,7 @@
   },
   "booster": {
     "enabled": true,
-    "useAfterSpawnMs": 12000,
+    "useAfterAfkMs": 12000,
     "itemNames": ["SHARD BOOSTER"],
     "consumeTimeoutMs": 8000
   },
