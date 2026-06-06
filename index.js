@@ -51,7 +51,7 @@ function loadConfig () {
     },
     shardAfkGuard: {
       enabled: parsed.shardAfkGuard?.enabled !== false,
-      checkAfterSpawnMs: Number(parsed.shardAfkGuard?.checkAfterSpawnMs || 30000),
+      checkAfterSpawnMs: Number(parsed.shardAfkGuard?.checkAfterSpawnMs || 75000),
       afkCommand: parsed.shardAfkGuard?.afkCommand || '/afk',
       guiWaitMs: Number(parsed.shardAfkGuard?.guiWaitMs || 10000),
       clickSlot: parsed.shardAfkGuard?.clickSlot === null ? null : Number(parsed.shardAfkGuard?.clickSlot ?? 0),
@@ -422,8 +422,8 @@ function runCommandsAfterSpawn (session) {
 
 function scheduleBoosterUse (session) {
   if (!config.booster.enabled || session.boosterUsed || !session.isInAfkArea || config.booster.useAfterAfkMs < 1000) return
+  if (session.boosterTimer) return
 
-  clearTimeout(session.boosterTimer)
   session.boosterTimer = setTimeout(() => {
     session.boosterTimer = null
     useShardBoosterIfPresent(session).catch((err) => sessionLog(session, `Shard booster use failed: ${err.message || err}`))

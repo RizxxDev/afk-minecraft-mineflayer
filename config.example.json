@@ -56,7 +56,7 @@
   },
   "shardAfkGuard": {
     "enabled": true,
-    "checkAfterSpawnMs": 30000,
+    "checkAfterSpawnMs": 75000,
     "afkCommand": "/afk",
     "guiWaitMs": 10000,
     "clickSlot": 0,
